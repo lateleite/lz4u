@@ -1,0 +1,18 @@
+.{
+    .name = .lz4u,
+    .fingerprint = 0x92970c65ea79cfae,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .argzon = .{
+            .url = "git+https://codeberg.org/tensorush/argzon.git#ef5972d676a73f440b33aa8e42b3f718311ed19b",
+            .hash = "argzon-0.5.1-Cl574pOmAgBR1ruTXA0GRxG8Ytl6zrz0GtQqmfxVwyrH",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "cmd",
+        "src",
+    },
+}
