@@ -2,9 +2,9 @@
 
 lz4u is an LZ4 compressor and decompressor library and tool implementation written in Zig.
 
-Its defining trait is having been made for the `std.Io.Reader` and `std.Io.Writer` interfaces.
+Its defining trait is having been made for the `std.Io.Reader` and `std.Io.Writer` interfaces, accompanied by a "raw" block compressor and decompressor.
 
-Zig 0.15 is required.
+Zig 0.15.2 is supported.
 
 ## Installing as a `build.zig.zon` package
 
@@ -37,7 +37,7 @@ pub fn build(b: *std.Build) !void {
 
 ## Usage
 
-### Decompressor
+### Frame Decompressor
 
 How to load a file from filesystem, decompress and write it to the filesystem again:
 
@@ -57,17 +57,17 @@ pub fn main() !void {
     defer out_file.close();
 
     // there must be at least `queryInCapacity()` memory available for the reader to work 
-    const reader_buf = try arena_alloc.alloc(u8, lz4u.Decompress.queryInCapacity());
+    const reader_buf = try arena_alloc.alloc(u8, lz4u.Frame.Decompress.queryInCapacity());
     var reader = in_file.reader(reader_buf);
 
     // there must be at least `queryOutCapacity()` memory available for the writer to work 
-    const writer_buf = try arena_alloc.alloc(u8, lz4u.Decompress.queryOutCapacity());
+    const writer_buf = try arena_alloc.alloc(u8, lz4u.Frame.Decompress.queryOutCapacity());
     var writer = out_file.writer(writer_buf);
 
     // `decompressor_buf` is optional, but it may boost performance by reducing syscalls.
     const decompressor_buf = try arena_alloc.alloc(u8, lz4u.min_indirect_buffer_len);
-    var decompressor: lz4u.Decompress = .init(&reader.interface, decompressor_buf, .{ .verify_checksum = true });
-    //var decompressor: lz4u.Decompress = .init(&reader.interface, &.{}, .{ .verify_checksum = true });
+    var decompressor: lz4u.Frame.Decompress = .init(&reader.interface, decompressor_buf, .{ .verify_checksum = true });
+    //var decompressor: lz4u.Frame.Decompress = .init(&reader.interface, &.{}, .{ .verify_checksum = true });
 
     defer writer.interface.flush() catch {};
 
@@ -83,7 +83,7 @@ pub fn main() !void {
 }
 ```
 
-### Compressor
+### Frame Compressor
 
 How to load a file from filesystem, compress it and write it to the filesystem again:
 
@@ -104,7 +104,7 @@ pub fn main() !void {
     defer out_file.close();
 
     // the compressor's options
-    const compress_options: lz4u.Compress.Options = .{
+    const compress_options: lz4u.Frame.Compress.Options = .{
         // a block's maximum memory size
         .max_block_size = .@"1MB",
         // if enabled, the decompressed data has its checksum verified
@@ -118,17 +118,17 @@ pub fn main() !void {
     };
 
     // reader's buffer may have any size, the compressor does not care.
-    const reader_buf = try arena_alloc.alloc(u8, 8196);
+    const reader_buf = try arena_alloc.alloc(u8, 8 * 1024);
     var reader = in_file.reader(reader_buf);
 
     // however, the writer's buffer must be at least `queryOutCapacity()` long`
-    const writer_buf = try arena_alloc.alloc(u8, lz4u.Compress.queryOutCapacity(compress_options));
+    const writer_buf = try arena_alloc.alloc(u8, lz4u.Frame.Compress.queryOutCapacity(compress_options));
     var writer = out_file.writer(writer_buf);
 
     // a window buffer `lz4u.max_window_len` long must always be provided, regardless of block dependency
     const window_buf = try arena_alloc.alloc(u8, lz4u.max_window_len);
 
-    var compressor: lz4u.Compress = try .init(&writer.interface, window_buf, compress_options);
+    var compressor: lz4u.Frame.Compress = try .init(&writer.interface, window_buf, compress_options);
 
     _ = try compressor.writer.sendFileAll(&reader, .unlimited);
 
@@ -140,6 +140,101 @@ pub fn main() !void {
     // any new write will fail.
     // (if you wish to compress a new stream, you'll have to reinitialize the compressor.)
     try compressor.finish();
+
+    try writer.interface.flush();
+}
+```
+
+### Raw Block Decompressor
+
+How to load a file from filesystem, decompress and write it to the filesystem again:
+
+```zig
+const std = @import("std");
+const lz4u = @import("lz4u");
+
+pub fn main() !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const arena_alloc = arena.allocator();
+
+    var in_file = try std.fs.cwd().openFile("some_raw_data.lz4", .{ .mode = .read_only });
+    defer in_file.close();
+
+    var out_file = try std.fs.cwd().createFile("decompressed_data.txt", .{});
+    defer out_file.close();
+
+    // reader can have any arbitrary size, including zero
+    const reader_buf = try arena_alloc.alloc(u8, 16 * 1024);
+    var reader = in_file.reader(reader_buf);
+
+    // writer can have any arbitrary size
+    const writer_buf = try arena_alloc.alloc(u8, 16 * 1024);
+    var writer = out_file.writer(writer_buf);
+
+    // `decompressor_buf` is optional, but it may boost performance by reducing syscalls.
+    // if provided it must be at least `queryIndirectCapacity()` long
+    const decompressor_buf = try arena_alloc.alloc(u8, lz4u.Raw.Decompress.queryIndirectCapacity());
+
+    // 
+    var decompressor: lz4u.Decompress = .init(&reader.interface, decompressor_buf, .{
+        // a maximum block size length MUST be provided
+        // and it MUST match the same length used as the input data's compressor.
+        .max_block_size = 64 * 1024,
+    });
+
+    defer writer.interface.flush() catch {};
+
+    _ = decompressor.reader.streamRemaining(&writer.interface) catch |err| {
+        if (decompressor.err) |dec_err| {
+            // you can handle the decompressor specific error here
+            return dec_err;
+        } else {
+            // or handle some std.Io error
+            return err;
+        }
+    };
+}
+```
+
+### Raw Block Compressor
+
+How to load a file from filesystem, compress it and write it to the filesystem again:
+
+```zig
+
+const std = @import("std");
+const lz4u = @import("lz4u");
+
+pub fn main() !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const arena_alloc = arena.allocator();
+
+    var in_file = try std.fs.cwd().openFile("my_uncompressed_tarball.tar", .{ .mode = .read_only });
+    defer in_file.close();
+
+    var out_file = try std.fs.cwd().createFile("out_compressed_tarball.tar.lz4", .{});
+    defer out_file.close();
+
+    // reader's buffer may have any size, the compressor does not care.
+    const reader_buf = try arena_alloc.alloc(u8, 16 * 1024);
+    var reader = in_file.reader(reader_buf);
+
+    // writer's buffer may have any size, the compressor does not care.
+    const writer_buf = try arena_alloc.alloc(u8, 16 * 1024);
+    var writer = out_file.writer(writer_buf);
+
+    // a window buffer `lz4u.max_window_len` long must always be provided
+    const window_buf = try arena_alloc.alloc(u8, lz4u.max_window_len);
+
+    var compressor: lz4u.Raw.Compress = try .init(&writer.interface, window_buf, compress_options);
+
+    _ = try compressor.writer.sendFileAll(&reader, .unlimited);
+
+    // you may flush the compressor's writer buffer at anytime,
+    // however its resulting blocks may not be optimally compressed.
+    try compressor.writer.flush();
 
     try writer.interface.flush();
 }

@@ -55,6 +55,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         }),
+        .use_llvm = true,
     });
     const run_tests_all = b.addRunArtifact(tests_lz4u);
 

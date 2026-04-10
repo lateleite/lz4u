@@ -57,14 +57,14 @@ pub fn main() !void {
 
     const bytes_to_read = try in_file.getEndPos();
 
-    const reader_buf = try arena_alloc.alloc(u8, lz4u.Decompress.queryInCapacity());
+    const reader_buf = try arena_alloc.alloc(u8, lz4u.Frame.Decompress.queryInCapacity());
     var reader = in_file.reader(reader_buf);
 
-    const writer_buf = try arena_alloc.alloc(u8, lz4u.Decompress.queryOutCapacity());
+    const writer_buf = try arena_alloc.alloc(u8, lz4u.Frame.Decompress.queryOutCapacity());
     var writer = out_file.writer(writer_buf);
 
     const decompressor_buf = try arena_alloc.alloc(u8, lz4u.min_indirect_buffer_len);
-    var decompressor: lz4u.Decompress = .init(&reader.interface, decompressor_buf, .{ .verify_checksum = true });
+    var decompressor: lz4u.Frame.Decompress = .init(&reader.interface, decompressor_buf, .{ .verify_checksum = true });
 
     defer writer.interface.flush() catch |err| {
         process.fatal("Failed to flush data to {s} with {t}", .{ out_path, err });

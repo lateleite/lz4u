@@ -77,7 +77,7 @@ pub fn main() !void {
         .version = .{ .major = 0, .minor = 1, .patch = 0 },
         .enums = &.{
             BlockType,
-            lz4u.BlockMaxSize,
+            lz4u.Frame.BlockMaxSize,
         },
     });
     var arg_str_iter = try process.argsWithAllocator(arena_alloc);
@@ -111,7 +111,7 @@ pub fn main() !void {
         break :res null;
     };
 
-    const compress_options: lz4u.Compress.Options = .{
+    const compress_options: lz4u.Frame.Compress.Options = .{
         .max_block_size = args.options.@"block-max-size",
         .should_checksum_frame = args.flags.@"content-checksum",
         .should_checksum_block = args.flags.@"block-checksum",
@@ -125,12 +125,12 @@ pub fn main() !void {
     const reader_buf = try arena_alloc.alloc(u8, 8196);
     var reader = in_file.reader(reader_buf);
 
-    const writer_buf = try arena_alloc.alloc(u8, lz4u.Compress.queryOutCapacity(compress_options));
+    const writer_buf = try arena_alloc.alloc(u8, lz4u.Frame.Compress.queryOutCapacity(compress_options));
     var writer = out_file.writer(writer_buf);
 
     const window_buf = try arena_alloc.alloc(u8, lz4u.max_window_len);
 
-    var compressor: lz4u.Compress = try .init(&writer.interface, window_buf, compress_options);
+    var compressor: lz4u.Frame.Compress = try .init(&writer.interface, window_buf, compress_options);
 
     defer writer.interface.flush() catch |err| {
         process.fatal("Failed to flush data to {s} with {t}", .{ out_path, err });
