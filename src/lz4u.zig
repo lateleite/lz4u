@@ -5,7 +5,7 @@ pub const Block = @import("Block.zig");
 pub const max_history_len = 64 * 1024;
 pub const max_window_len = max_history_len * 2;
 pub const max_block_size = Frame.BlockMaxSize.@"4MB".toBytes();
-pub const min_indirect_buffer_len = (max_window_len * 2) + max_block_size;
+pub const min_indirect_buffer_len = (max_history_len * 2) + max_block_size;
 
 pub const min_token_length = 3;
 pub const max_token_length = 258;

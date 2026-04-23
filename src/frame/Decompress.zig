@@ -51,7 +51,7 @@ pub fn queryInCapacity() usize {
 }
 
 pub fn queryOutCapacity() usize {
-    return lz4u.max_window_len + lz4u.max_block_size;
+    return lz4u.max_history_len + lz4u.max_block_size;
 }
 
 pub const Options = struct {
@@ -163,7 +163,7 @@ fn rebase(r: *Reader, capacity: usize) void {
     const d: *Decompress = @alignCast(@fieldParentPtr("reader", r));
 
     const needs_history = switch (d.state) {
-        .in_frame => |in| in.frame.flg.block_indep,
+        .in_frame => |in| !in.frame.flg.block_indep,
         else => false,
     };
     // keep max_history_len in the buffer, in case the frame uses independent blocks
@@ -408,7 +408,7 @@ fn readInFrame(d: *Decompress, w: *Writer, limit: Limit, state: *State.InFrame) 
             };
 
             // Ensure the writer keeps history data and keeps block length memory free for us to write.
-            const remaining_block_len = block_reader.buffer.len - block_reader.seek;
+            const remaining_block_len = frame_block_size_max - bytes_written;
             _ = try w.writableSliceGreedyPreserve(lz4u.max_history_len, remaining_block_len);
 
             const write_pos = w.end;

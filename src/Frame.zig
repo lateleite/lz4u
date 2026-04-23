@@ -54,7 +54,7 @@ const testing = std.testing;
 // tests based off Zig's zstd decompressor
 //
 fn testDecompress(gpa: mem.Allocator, compressed: []const u8) ![]u8 {
-    var out: Io.Writer.Allocating = .init(gpa);
+    var out: Io.Writer.Allocating = try .initCapacity(gpa, Decompress.queryOutCapacity());
     defer out.deinit();
 
     var in: Io.Reader = .fixed(compressed);
@@ -68,7 +68,7 @@ fn testDecompressIndirect(gpa: mem.Allocator, compressed: []const u8) ![]u8 {
     const indirect_buf = try gpa.alloc(u8, lz4u.min_indirect_buffer_len);
     defer gpa.free(indirect_buf);
 
-    var out: Io.Writer.Allocating = .init(gpa);
+    var out: Io.Writer.Allocating = try .initCapacity(gpa, Decompress.queryOutCapacity());
     defer out.deinit();
 
     var in: Io.Reader = .fixed(compressed);
@@ -136,12 +136,19 @@ test "large file decompression" {
     try testExpectDecompress(uncompressed, compressed_dep);
     try testExpectDecompress(uncompressed, compressed_indep);
 
-    // NOTE: discarding a depending block compressed sample may fail and has undefined behavior if it succeeds
-    try testing.expectError(error.ReadFailed, testDiscard(testing.allocator, compressed_dep));
+    try testing.expectEqual(uncompressed.len, testDiscard(testing.allocator, compressed_dep));
     try testing.expectEqual(uncompressed.len, testDiscard(testing.allocator, compressed_indep));
 
     try testExpectDecompressIndirect(uncompressed, compressed_dep);
     try testExpectDecompressIndirect(uncompressed, compressed_indep);
+}
+
+test "4MB block dependant file decompression" {
+    const uncompressed = @embedFile("testdata/memory_archive.tar");
+    const compressed = @embedFile("testdata/memory_archive.tar.lz4");
+
+    try testExpectDecompress(uncompressed, compressed);
+    try testExpectDecompressIndirect(uncompressed, compressed);
 }
 
 test "partial magic number" {
@@ -212,5 +219,17 @@ test "large file compression" {
         .should_checksum_frame = true,
         .should_checksum_block = false,
         .independent_blocks = true,
+    });
+}
+
+test "4MB dependent archive file compression" {
+    const uncompressed = @embedFile("testdata/memory_archive.tar");
+    const compressed_dep = @embedFile("testdata/memory_archive.tar.lz4");
+
+    try testExpectCompress(uncompressed, compressed_dep, .{
+        .max_block_size = .@"4MB",
+        .should_checksum_frame = true,
+        .should_checksum_block = true,
+        .independent_blocks = false,
     });
 }
