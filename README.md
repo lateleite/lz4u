@@ -272,7 +272,7 @@ Benchmark 2 (3 runs): lz4u-dec linux-6.19.11.tar.lz4 linux-6.19.11.tar
   branch_misses       255M  ±  308K      255M  …  255M           0 ( 0%)        💩+864.2% ±  1.9%
 ```
 
-- Decompressing a Linux 6.19.11 source code tarball:
+- Compressing a Linux 6.19.11 source code tarball (with 4MB independent blocks):
 
 ```sh
 $ poop "lz4 -BI -B7 -f linux-6.19.11.tar linux-6.19.11.tar.lz4" "lz4u-enc -t independent -s 4MB -f linux-6.19.11.tar linux-6.19.11.tar.lz4"
